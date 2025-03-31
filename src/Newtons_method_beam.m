@@ -1,11 +1,9 @@
 
 % Newtons method - static case 
 % Beam with multiple beam elements. 
-function [iter] = Newtons_method_beam(beam, n_gauss_points, C, max_iter, TOL, f_ext, verbose)
+function [iter] = Newtons_method_beam(beam, n_gauss_points, C, max_iter, TOL, f_ext, verbose, free_dof)
     % iteration counter.
     iter = 0;
-    % free dof. 
-    free_dof = beam.compute_free_dof();
     % main loop. 
     while (iter < max_iter)
         % increment iteration counter. 

@@ -1,6 +1,5 @@
 
-% Case - Pure bending of beam
-
+% Case - Pure bending of beam, rollup. 
 clear; 
 clc; 
 %% CONSTANTS. 
@@ -38,8 +37,13 @@ GA_Y = 2;
 EI_Z = 2; 
 EI_Y = 2; 
 GJ = 2;
+
 % material C matrix. 
 C = diag([GA_Z, GA_Y, EA, EI_Z, EI_Y, GJ]);
+
+% fixed and free nodes. 
+fixed_nodes = [1]; 
+free_dof = compute_free_dof(fixed_nodes, dof, n_constraints, n_elems + 1);
 %% Simulation. 
 f_ext = zeros((beam.n_elems + 1) * beam.dof_per_node, 1); 
 
@@ -50,6 +54,9 @@ Fz = 0;
 mx = 0;
 my = 0; 
 mz = 1;
+
+% map spatial moments to directors. 
+
 
 node2_x = (beam.dof_per_node )*( beam.n_nodes - 1) + 1; 
 node2_y = node2_x + 1; 

@@ -4,7 +4,7 @@
 clear; 
 clc; 
 %% CONSTANTS. 
-n_elems = 10; % number of beam elements. 
+n_elems = 20; % number of beam elements. 
 L0 = 102.75; % initial length of the beam. 
 dL = L0 / n_elems; %
 
@@ -51,9 +51,12 @@ GA3 = 2.3077e6;
 C = diag([GA2, GA3, EA, EI2, EI3, GJ]); 
 
 % plot axis limits. 
-x_lim = L0 + 50;
-y_lim = 50; 
-z_lim = 50; 
+x_lim1 = -L0 - 50;
+x_lim2 = L0 + 50; 
+y_lim1 = -50; 
+y_lim2 = 50; 
+z_lim1 = -50; 
+z_lim2 = 50;
 
 % vertical forces. 
 F1_z = -1.35; 
@@ -84,17 +87,26 @@ max_iter = 50;
 
 % Tolerance. 
 Tol = 1e-7; 
+
+% fixed and free nodes. 
+fixed_nodes = [1]; 
+free_dof = compute_free_dof(fixed_nodes, dof, n_constraints, n_elems + 1);
 %% Simulation. 
 % number of load steps. 
-load_steps = 10; 
+load_steps = 100; 
+avg_iterations = 0; 
 for i=1:load_steps
     force = (i/load_steps) * f_ext; 
-    [iter] = Newtons_method_beam(beam, n_gauss_points, C, max_iter, Tol, force, 1);
+    [iter] = Newtons_method_beam(beam, n_gauss_points, C, max_iter, Tol, force, 1, free_dof);
+    avg_iterations = avg_iterations + iter; 
 end
+avg_iterations = avg_iterations / load_steps;
 %% Plot beam. 
-beam.plot(x_lim, y_lim, z_lim, 0, "");
+beam.plot(x_lim1, x_lim2, y_lim1, y_lim2, z_lim1, z_lim2, 0, "", 1);
+fprintf(1, '\n');
 % show end node positions and directors. 
-beam.display_end_node_directors(); 
+% beam.display_end_node_directors(); 
+disp("Numerical results: "); 
 beam.display_end_node_pos();
 % displacement of the free end node. 
 % end beam object.
@@ -106,11 +118,23 @@ X_current = end_beam.x2_t;
 % calculate the difference. 
 dX = X_current - X_initial;
 % display end node translation. 
-output = "U_b = " + num2str(abs(dX(1))) + ", V_b = " + num2str(abs(dX(3))); 
+% disp("Mean iterations: " + num2str(round(avg_iterations, 2)) + " U_b = " + num2str(abs(dX(1))) + ", V_b = " + num2str(abs(dX(3)))); 
+U_b = abs(dX(1)); 
+V_b = abs(dX(3)); 
+%fprintf(1, '\n');
 % compare to the analytical solution. 
 Ub_analytical = 30.75; 
 Vb_analytical = 66.96; 
 output2 = "Ub_analytical = " + num2str(Ub_analytical) + ", Vb_analytical = " + num2str(Vb_analytical); 
 % print output. 
-display(output); 
-display(output2);
+fprintf('Number of elements: %d Mean number iterations = %1.1f U_b = %3.2f , V_b =  %3.2f\n',n_elems, round(avg_iterations, 2), U_b, V_b);
+fprintf(1, '\n');
+disp("Analytical results: "); 
+fprintf("Ub_analytical = %3.2f, Vb_analytical = %3.2f\n", Ub_analytical, Vb_analytical); 
+fprintf(1, '\n');
+% compare to cardona.
+disp("Cardona results: ")
+display_analytical_cantilever_beam_transverse_loads(); 
+
+
+

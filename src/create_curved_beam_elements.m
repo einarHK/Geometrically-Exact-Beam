@@ -1,7 +1,9 @@
-
-% creates an array of beam elements, based on the coordinates input for
-% each node. 
-function beam_elems = create_beam_elements(n_elems, beam_coordinates, beam_directors, beam_lengths, beam_constraints, beam_dofs, beam_fixed_dofs, lambdas)
+% INPUT: number of beam elements n_elems, beam nodal coordinates 
+% beam_coordinates, beam nodal directors beam_directors, beam initial
+% lengths beam_lengths, beam constraints beam_constraints, beam kinematic
+% degrees of freedom beam_dofs, beam fixed dof per node beam_fixed_dofs, beam node lagrange multipliers lambdas. 
+% OUTPUT: array of beam elements of class type Beam_elem beam_elems. 
+function beam_elems = create_curved_beam_elements(n_elems, beam_coordinates, beam_directors, beam_lengths, beam_constraints, beam_dofs, beam_fixed_dofs, lambdas)
     beam_elems = []; % initialize array. 
     % iterate over each beam element. 
     for i=1:n_elems
@@ -16,9 +18,10 @@ function beam_elems = create_beam_elements(n_elems, beam_coordinates, beam_direc
         d22 = d2(4:6); 
         d23 = d2(7:9); % axis director - node 2. 
         L0 = beam_lengths(i); % the initial length for the beam. 
-        % assume this is the reference gamma and omega vectors. 
-        gamma_ref = [0; 0; 1];
-        omega_ref = [0; 0; 0]; 
+        % calculate gamma ref. 
+        gamma_ref = compute_gamma(0, L0, x1, x2, d11, d12, d13, d21, d22, d23); 
+        % calculate omega ref. 
+        omega_ref = compute_omega(0, L0, d11, d12, d13, d21, d22, d23);
         % number of constraints on the element. 
         n_constraints = beam_constraints(i); 
         % free dof - kinematic variables. 
@@ -34,5 +37,4 @@ function beam_elems = create_beam_elements(n_elems, beam_coordinates, beam_direc
         % add beam element to the array of beam elements. 
         beam_elems = [beam_elems, beam]; 
     end
-
 end

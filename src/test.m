@@ -76,7 +76,7 @@ scaling = 0;
 title = "Force at node 2: [Fx, Fy, Fz] = [" + num2str(F_x) + "N, " + num2str(F_y) + "N, " + num2str(F_z) + "N ]"; 
 output1 = "Initial Node 2 position: [" + num2str(beam.x2(1)) + "m, " +  num2str(beam.x2(2)) + "m, " +  num2str(beam.x2(3)) + "m]";
 output2 = "Node 2 position: [" + num2str(beam.x2_t(1)) + "m, " +  num2str(beam.x2_t(2)) + "m, " +  num2str(beam.x2_t(3)) + "m]";
-beam.show_config(x_lim, y_lim, z_lim, scaling, title);
+beam.show_config(-x_lim, x_lim, -y_lim, y_lim, -z_lim, z_lim, scaling, title, 1);
 disp(output1);
 disp(output2);
 beam.display_node_directors();

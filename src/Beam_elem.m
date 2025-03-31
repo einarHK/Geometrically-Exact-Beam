@@ -167,6 +167,15 @@ classdef Beam_elem < handle
             dQ = [dQ1; dQ2; dQ3; dQ4];
         end
 
+        % computes gamma reference, when directors not aligned with
+        % coordinate axes. 
+        function gamma_ref = compute_gamma_ref(obj)
+            dx = obj.x2 - obj.x1; 
+            dx_size = sqrt(transpose(dx) * dx); 
+            % beam axis unit vector. 
+            gamma_ref = dx / dx_size; 
+        end
+        
         % computes the gamma vector. 
         % interpolation value s - in [-1,1]. 
         function gamma = compute_gamma(obj, s)
@@ -1047,13 +1056,13 @@ classdef Beam_elem < handle
         end
 
         % plots the current beam configuration. 
-        function show_config(obj, x_lim, y_lim, z_lim, scaling, title_str)
+        function show_config(obj, x_lim1, x_lim2, y_lim1, y_lim2, z_lim1, z_lim2, scaling, title_str, scale_factor)
             [X, Y, Z] = obj.compute_coordinates(); % returns node 1 and node 2 X,Y,Z vals. 
             X = round(X, 5); 
             Y = round(Y, 5); 
             Z = round(Z, 5);
             % plot beam axis. 
-            plot3(X, Y, Z, LineStyle='-', Color="red", Marker="o", MarkerFaceColor="blue", LineWidth=1);
+            plot3(X, Y, Z, LineStyle='-', Color="red", Marker="o", MarkerFaceColor="blue", MarkerSize=2, LineWidth=1);
             hold on; 
             % plot directors. 
             x1 = obj.x1_t(1); 
@@ -1088,27 +1097,28 @@ classdef Beam_elem < handle
             else
                 scale = 1; 
             end
+            scale = scale_factor * scale; 
             % plot directors at each node. 
-            plot3([x1, x1 + scale * d11_x], [y1, y1 + scale *d11_y], [z1, z1 + scale*d11_z], Marker=">", LineStyle='-', Color="blue", LineWidth=1);
+            plot3([x1, x1 + scale * d11_x], [y1, y1 + scale *d11_y], [z1, z1 + scale*d11_z], Marker=">", LineStyle='-', Color="blue", MarkerSize=2, LineWidth=1);
             hold on;
-            plot3([x1, x1 + scale*d12_x], [y1, y1 + scale*d12_y], [z1, z1 + scale*d12_z], Marker=">", LineStyle='-', Color="blue", LineWidth=1);
+            plot3([x1, x1 + scale*d12_x], [y1, y1 + scale*d12_y], [z1, z1 + scale*d12_z], Marker=">", LineStyle='-', Color="blue", MarkerSize=2, LineWidth=1);
             hold on;
-            plot3([x1, x1 + scale*d13_x], [y1, y1 + scale*d13_y], [z1, z1 + scale*d13_z], Marker=">", LineStyle='-', Color="blue", LineWidth=1);
+            plot3([x1, x1 + scale*d13_x], [y1, y1 + scale*d13_y], [z1, z1 + scale*d13_z], Marker=">", LineStyle='-', Color="blue", MarkerSize=2, LineWidth=1);
             grid on;
-            plot3([x2, x2 + scale*d21_x], [y2, y2 + scale*d21_y], [z2, z2 + scale*d21_z], Marker=">", LineStyle='-', Color="blue", LineWidth=1);
+            plot3([x2, x2 + scale*d21_x], [y2, y2 + scale*d21_y], [z2, z2 + scale*d21_z], Marker=">", LineStyle='-', Color="blue", MarkerSize=2, LineWidth=1);
             hold on;
-            plot3([x2, x2 + scale*d12_x], [y2, y2 + scale*d22_y], [z2, z2 + scale*d22_z], Marker=">", LineStyle='-', Color="blue",  LineWidth=1);
+            plot3([x2, x2 + scale*d12_x], [y2, y2 + scale*d22_y], [z2, z2 + scale*d22_z], Marker=">", LineStyle='-', Color="blue", MarkerSize=2, LineWidth=1);
             hold on;
-            plot3([x2, x2 + scale*d23_x], [y2, y2 + scale*d23_y], [z2, z2 + scale*d23_z], Marker=">", LineStyle='-', Color="blue",  LineWidth=1);
+            plot3([x2, x2 + scale*d23_x], [y2, y2 + scale*d23_y], [z2, z2 + scale*d23_z], Marker=">", LineStyle='-', Color="blue", MarkerSize=2, LineWidth=1);
             hold on;
             grid on;
             xlabel("x-axis"); 
             ylabel("y-axis");
             zlabel("z-axis");
             % set axis lim. 
-            xlim([-x_lim, x_lim]); 
-            ylim([-y_lim, y_lim]); 
-            zlim([-z_lim, z_lim]);
+            xlim([x_lim1, x_lim2]); 
+            ylim([y_lim1, y_lim2]); 
+            zlim([z_lim1, z_lim2]);
             % title of plot. 
             title([title_str]);
         end
