@@ -2,7 +2,7 @@
 clear;
 clc;
 %% CONSTANTS. 
-n_elems = 20; % number of beam elements. 
+n_elems = 10; % number of beam elements. 
 
 dof = 12; % kinematic degrees of freedom per node. 
 fixed_dof = 12; % fix the kinematic dof at the first node. 
@@ -58,10 +58,16 @@ free_dof = compute_free_dof(fixed_nodes, dof, n_constraints, n_elems + 1);
 Tol = 1e-6; 
 %% SIMULATION. 
 load_steps = 10; 
+
 % force components - end node. 
 fx = 0; 
 fy = 0; 
-fz = 600; 
+fz = 600;
+
+dfx = fx / load_steps; 
+dfy = fy / load_steps; 
+dfz = fz / load_steps; 
+
 % force node positions. 
 node_fx = beam.n_elements * beam.dof_per_node + 1; 
 node_fy = beam.n_elements * beam.dof_per_node + 2;
@@ -70,11 +76,19 @@ node_fz = beam.n_elements * beam.dof_per_node + 3;
 % iterate over each load step. 
 for i=1:load_steps
     f_ext = zeros((beam.n_nodes) * beam.dof_per_node, 1); 
+    
     f_ext(node_fx) = fx * (i/load_steps); 
     f_ext(node_fy) = fy * (i/load_steps); 
     f_ext(node_fz) = fz * (i/load_steps);
+
+    % f_ext(node_fx) = dfx; 
+    % f_ext(node_fy) = dfy; 
+    % f_ext(node_fz) = dfz; 
+
     % solve using Newton-Rhapson method. 
     [iter] = Newtons_method_beam(beam, n_gauss_points, C, max_iter, Tol, f_ext, 1, free_dof); 
+    
+
 end
 %% PLOT RESULTS. 
 x_lim1 = -50; 

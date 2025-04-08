@@ -1,9 +1,10 @@
 
+% Cantilever beam - Axial force case. 
 clear;
 clc; 
 %% CONSTANTS. 
 n_elems = 10; % number of beam elements. 
-L = 2; % initial length. 
+L = 1; % initial length. 
 x1 = transpose([0, 0, 0]); % start coordinate. 
 x2 = transpose([L, 0, 0]); % end coordinate. 
 
@@ -33,23 +34,17 @@ beam_elems = create_beam_elements(n_elems, beam_coordinates, beam_directors, bea
 
 % beam elements and beam object. 
 beam = Beam(n_elems, beam_elems, dof, n_constraints); 
-gamma_ref = transpose([0, 0, 1]);
-omega_ref = transpose([0, 0, 0]);
 %% SIMULATION. 
 % max tolerance. 
 TOL = 1e-12; 
 
 % number of load steps. 
-load_steps = 5; 
+load_steps = 10; 
 
 % force components. 
 fx = 1; 
-fy = 0.4; 
+fy = 0; 
 fz = 0; 
-
-df_x = fx/load_steps; 
-df_y = fy/load_steps; 
-df_z = fz/load_steps;
 
 % material property matrix. 
 C = diag([1, 1, 1, 1, 1, 1]); 
@@ -69,29 +64,23 @@ for i=1:load_steps
     fx_node = beam.n_elements * beam.dof_per_node + 1; 
     fy_node = beam.n_elements * beam.dof_per_node + 2; 
     fz_node = beam.n_elements * beam.dof_per_node + 3; 
-   
     f_ext(fx_node) = (i/load_steps) * fx; 
     f_ext(fy_node) = (i/load_steps) * fy; 
     f_ext(fz_node) = (i/load_steps) * fz; 
-    
     [iter] = Newtons_method_beam(beam, n_gauss_points, C, max_iter, TOL, f_ext, 1, free_dof); 
-    beam.display_end_node_pos()
 
-    % iter = 0; 
-    % Newtons method. 
 end
 
 %% PLOTS. 
-x_lim1 = -10; 
-x_lim2 = 50; 
-y_lim1 = -10; 
-y_lim2 = 10; 
-z_lim1 = -2; 
-z_lim2 = 10;
-scale = 0.5; 
+x_lim1 = 0; 
+x_lim2 = fx + L; 
+y_lim1 = -1; 
+y_lim2 = 1 + fy; 
+z_lim1 = 0; 
+z_lim2 = 2 + fz;
+scale = 0.1; 
 
 title_str =  "Axial Elongation: Fx = " + num2str(fx) +  "N " + ", Fy = " + num2str(fy) + "N " + ", Fz = " + num2str(fz) + "N"; 
 beam.plot_deformed_beam(x_lim1, x_lim2, y_lim1, y_lim2, z_lim1, z_lim2, scale, title_str);
-
 
 

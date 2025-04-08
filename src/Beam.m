@@ -6,7 +6,7 @@ classdef Beam < handle
         n_elements; % number of beam elements.  
         dof_per_node; % kinematic dof per node. 
         constraint_per_node; % constraints per node. 
-        n_nodes; % total number of beam nodes. 
+        n_nodes; % total number of beam nodes.         
     end
     methods
         % constructor. 
@@ -16,6 +16,17 @@ classdef Beam < handle
             obj.dof_per_node = dof_per_node; 
             obj.constraint_per_node = constraint_per_node;
             obj.n_nodes = n_elements + 1;
+        end
+
+        % for initialization of e and s vectors. 
+        function init_strain_stress(obj, e0, s0)            
+            for i=1:obj.n_elements
+                i_start = 1 + (i-1) * 6; 
+                i_end = i_start + 5; 
+                beam = obj.beam_elements(i); 
+                beam.e0 = e0(i_start:i_end); 
+                beam.s0 = s0(i_start:i_end); 
+            end
         end
         
         % returns the beam coordinates in the undeformed state. 
@@ -160,6 +171,65 @@ classdef Beam < handle
 
         end
 
+        % computes the strains for each beam, based on current
+        % configuration - assume s = 0 for interpolating on the beam. 
+        function e = compute_strain(obj)
+            e = zeros(6 * obj.n_elements, 1); 
+            for i=1:obj.n_elements
+                beam = obj.beam_elements(i); 
+                e_q = beam.compute_e(0, beam.gamma_ref, beam.omega_ref); 
+                i_start = 1 + (i - 1) * 6; 
+                i_end = i_start + 5; 
+                e(i_start:i_end) = e(i_start:i_end) + e_q;
+            end
+        end
+
+        % computes the stresses for each beam, based on current 
+        % configuration. 
+        function s = compute_stress(obj, C)
+            s = zeros(6 * obj.n_elements, 1);
+            for i=1:obj.n_elements
+                beam = obj.beam_elements(i); 
+                s_val = beam.compute_s(0, C, beam.gamma_ref, beam.omega_ref); 
+                i_start = 1 + (i - 1) * 6; 
+                i_end = i_start + 5; 
+                s(i_start:i_end) = s(i_start:i_end) + s_val;
+            end
+        end
+
+        % returns current strain vector. 
+        function e = get_strain_vector(obj)
+            e = zeros(6 * obj.n_elements, 1); 
+            for i = 1:obj.n_elements
+                i_start = 1 + (i - 1) * 6; 
+                i_end = i_start + 5; 
+                beam = obj.beam_elements(i);
+                e(i_start:i_end) =  e(i_start:i_end) + beam.e0;
+            end
+        end
+        
+        % returns current stress vector. 
+        function s = get_stress_vector(obj)
+            s = zeros(6 * obj.n_elements, 1); 
+            for i = 1:obj.n_elements
+                i_start = 1 + (i - 1) * 6; 
+                i_end = i_start + 5; 
+                beam = obj.beam_elements(i);
+                s(i_start:i_end) =  s(i_start:i_end) + beam.s0;
+            end
+        end
+        
+        % computes g(e,s) = s - C * e. 
+        function g = compute_g(obj, e, s, C)            
+            g = zeros(6 * obj.n_elements, 1);
+            for i=1:obj.n_elements
+                i_start = 1 + (i - 1) * 6; 
+                i_end = i_start + 5; 
+                % beam = obj.beam_elements(i); 
+                g(i_start:i_end) = s(i_start:i_end) - C * e(i_start:i_end); 
+            end
+        end
+
         % returns the stress and strain pair for the given elements. 
         function [stresses, strains] = compute_stress_strain(obj, elements, C)
             stresses = []; 
@@ -208,6 +278,7 @@ classdef Beam < handle
             Kt = zeros(obj.dof_per_node * (obj.n_elements + 1), obj.dof_per_node * (obj.n_elements + 1));
             for i=1:obj.n_elements
                 beam = obj.beam_elements(i); 
+                % get the stiffness matrix from the beam element. 
                 kt = beam.compute_Kt(n_gauss_points, C, beam.gamma_ref, beam.omega_ref);
                 i1 = 1 + (i - 1) * beam.dof;
                 i2 = i1 - 1 + 2 * beam.dof;
@@ -232,9 +303,8 @@ classdef Beam < handle
             i1 = obj.dof_per_node * (obj.n_elements - 1) + 1; 
             i2 = obj.dof_per_node * (obj.n_elements + 1); 
             dH_dq(i1:i2, i1:i2) =  dH_dq(i1:i2, i1:i2) + dh_dq; 
-
         end
-        
+       
         % computes the vector h=h(q).
         function h_q = compute_h_q(obj)
             h_q = zeros((obj.n_elements + 1) * obj.constraint_per_node, 1); 
@@ -295,6 +365,159 @@ classdef Beam < handle
             S(n_dof + 1:n_dof + n_constraints, 1:n_dof) = S(n_dof + 1:n_dof + n_constraints, 1:n_dof) + S21; 
         end
 
+        % computes the full S matrix, when considering 4 nonlinear
+        % equations instead of 2. 
+        function S11 = compute_S11_component(obj, n_gauss_points, C)
+            % init empty matrix. 
+            S11 = zeros(obj.n_nodes * obj.dof_per_node, obj.n_nodes * obj.dof_per_node);
+            for i = 1:obj.n_elements
+                beam = obj.beam_elements(i); 
+                S11_component = beam.compute_U2_integral_2(n_gauss_points, C, beam.gamma_ref, beam.omega_ref) + beam.compute_V_tot();
+                i_start = obj.dof_per_node * (i - 1) + 1; 
+                i_end = i_start - 1 + 2 * obj.dof_per_node; 
+                S11(i_start:i_end, i_start:i_end) = S11(i_start:i_end, i_start:i_end) + S11_component;
+            end            
+        end
+        
+        function S12 = compute_S12_component(obj)
+            S12 = zeros(obj.n_nodes * obj.dof_per_node, obj.n_elements * 6); 
+        end
+
+        function S13 = compute_S13_component(obj, n_gauss_points)
+            S13 = zeros(obj.n_nodes * obj.dof_per_node, obj.n_elements * 6); 
+            for i=1:obj.n_elements
+                beam = obj.beam_elements(i); 
+                [weights, points] = beam.gauss_quadrature(n_gauss_points); 
+                dx = beam.L0 / 2; 
+                B_mat = zeros(2 * obj.dof_per_node, 6); 
+                for j=1:n_gauss_points
+                    point = points(j); 
+                    weight = weights(j); 
+                    B = beam.compute_B(point); 
+                    B_mat = B_mat + transpose(B) * (weight * dx);  
+                end
+                i1 = 1 + (i - 1) * obj.dof_per_node; 
+                i2 = i1 - 1 + 2 * obj.dof_per_node; 
+                j1 = 1 + (i - 1) * 6; 
+                j2 = j1 + 5;
+                S13(i1:i2,j1:j2) = S13(i1:i2,j1:j2) + B_mat; 
+            end
+        end
+
+        function S14 = compute_S14_component(obj)
+            S14 = zeros(obj.n_nodes * obj.dof_per_node, obj.n_nodes * obj.constraint_per_node);     
+            for i = 1:obj.n_elements
+                beam = obj.beam_elements(i);
+                H1 = beam.compute_H_node1(); 
+                Z12 = zeros(obj.dof_per_node, obj.constraint_per_node);
+                S14_component = [transpose(H1), Z12; Z12, Z12]; 
+                i1 = 1 + (i - 1) * obj.dof_per_node; 
+                i2 = i1 - 1 + 2 * obj.dof_per_node; 
+                j1 = 1 + (i - 1) * obj.constraint_per_node; 
+                j2 = j1 - 1 + 2 * obj.constraint_per_node;
+                S14(i1:i2, j1:j2) = S14(i1:i2, j1:j2) + S14_component; 
+            end
+            H2 = beam.compute_H_node2();
+            S14_component = [Z12, Z12; Z12, transpose(H2)]; 
+            S14(i1:i2, j1:j2) = S14(i1:i2, j1:j2) + S14_component; 
+        end
+
+        function S21 = compute_S21_component(obj)
+            S21 = zeros(6 * obj.n_elements, obj.n_nodes * obj.dof_per_node); 
+            for i=1:obj.n_elements
+                beam = obj.beam_elements(i); 
+                B = beam.compute_B(0);
+                i1 = 1 + (i - 1) * 6; 
+                i2 = i1 + 5; 
+                j1 = 1 + obj.dof_per_node * (i - 1); 
+                j2 = j1 - 1 + 2 * obj.dof_per_node; 
+                S21(i1:i2, j1:j2) = S21(i1:i2, j1:j2) - B; 
+            end
+        end
+
+        function S22 = compute_S22_component(obj)
+            S22 = eye(6 * obj.n_elements); 
+        end
+
+        function S23 = compute_S23_component(obj) 
+            S23 = zeros(6 * obj.n_elements, 6 * obj.n_elements); 
+        end
+        
+        function S24 = compute_S24_component(obj)
+           S24 = zeros(6 * obj.n_elements, obj.n_nodes * obj.constraint_per_node); 
+        end
+
+        function S31 = compute_S31_component(obj)
+            S31 = zeros(6 * obj.n_elements, obj.n_nodes * obj.dof_per_node);
+        end
+
+        function S32 = compute_S32_component(obj, C)
+            S32 = zeros(6 * obj.n_elements, 6 * obj.n_elements); 
+            for i=1:obj.n_elements
+                i1 = 1 + (i-1) * 6; 
+                i2 = i1 + 5; 
+                S32(i1:i2, i1:i2) = S32(i1:i2, i1:i2) -C; 
+            end
+        end
+        
+        function S33 = compute_S33_component(obj)
+            S33 = eye(6 * obj.n_elements);
+        end
+
+        function S34 = compute_S34_component(obj)
+            S34 = zeros(6 * obj.n_elements, obj.n_nodes * obj.constraint_per_node); 
+        end
+
+        function S41 = compute_S41_component(obj)
+            S41 = zeros(obj.n_nodes * obj.constraint_per_node, obj.n_nodes * obj.dof_per_node); 
+            for i=1:obj.n_elements
+                beam = obj.beam_elements(i); 
+                H1 = beam.compute_H_node1(); 
+                Z12 = zeros(obj.constraint_per_node, obj.dof_per_node); 
+                S41_component = [H1, Z12; Z12, Z12]; 
+                i1 = 1 + (i - 1) * obj.constraint_per_node; 
+                i2 = i1 - 1 + 2 * obj.constraint_per_node; 
+                j1 = 1 + (i - 1) * obj.dof_per_node; 
+                j2 = j1 - 1 + 2 * obj.dof_per_node; 
+                S41(i1:i2, j1:j2) = S41(i1:i2, j1:j2) + S41_component; 
+            end
+            H2 = beam.compute_H_node2(); 
+            S41_component = [Z12, Z12; Z12, H2]; 
+            S41(i1:i2, j1:j2) = S41(i1:i2, j1:j2) + S41_component; 
+        end
+
+        function S42 = compute_S42_component(obj)
+            S42 = zeros(obj.n_nodes * obj.constraint_per_node, 6 * obj.n_elements);
+        end
+
+        function S43 = compute_S43_component(obj)
+            S43 = zeros(obj.n_nodes * obj.constraint_per_node, 6 * obj.n_elements);
+        end
+
+        function S44 = compute_S44_component(obj)
+            S44 = zeros(obj.n_nodes * obj.constraint_per_node, obj.n_nodes * obj.constraint_per_node); 
+        end
+
+        function S = compute_full_S_mat(obj, n_gauss_points, C)
+            S11 = obj.compute_S11_component(n_gauss_points, C); 
+            S12 = obj.compute_S12_component(); 
+            S13 = obj.compute_S13_component(n_gauss_points);
+            S14 = obj.compute_S14_component();
+            S21 = obj.compute_S21_component(); 
+            S22 = obj.compute_S22_component(); 
+            S23 = obj.compute_S23_component(); 
+            S24 = obj.compute_S24_component(); 
+            S31 = obj.compute_S31_component(); 
+            S32 = obj.compute_S32_component(C); 
+            S33 = obj.compute_S33_component(); 
+            S34 = obj.compute_S34_component(); 
+            S41 = obj.compute_S41_component(); 
+            S42 = obj.compute_S42_component(); 
+            S43 = obj.compute_S43_component(); 
+            S44 = obj.compute_S44_component();
+            S = [S11, S12, S13, S14; S21, S22, S23, S24; S31, S32, S33, S34; S41, S42, S43, S44]; 
+        end
+
         % displays end node coordinates. 
         function display_end_node_pos(obj)
             beam = obj.beam_elements(obj.n_elements); 
@@ -320,6 +543,49 @@ classdef Beam < handle
             disp(output2); 
             disp(output3);
             disp(output4); 
+        end
+
+        % update the beam strain and stresses for each element. 
+        function update_beam_strain_stress(obj, delta_e, delta_s)            
+            for i=1:obj.n_elements
+                i_start = 1 + 6 * (i - 1); 
+                i_end = i_start + 5; 
+                beam = obj.beam_elements(i);
+                beam.e0 = beam.e0 + delta_e(i_start:i_end); 
+                beam.s0 = beam.s0 + delta_s(i_start:i_end); 
+            end
+        end
+
+        % update the beam positions. 
+        function update_beam_q(obj, delta_q)           
+            for i=1:obj.n_elements
+                i_start = 1 + (i - 1) * obj.dof_per_node;
+                i_end = i_start - 1 + 2 * obj.dof_per_node; 
+                dq = delta_q(i_start:i_end); 
+                dx1 = dq(1:3); 
+                dx2 = dq(13:15); 
+                delta_d1_A = dq(4:6); 
+                delta_d2_A = dq(7:9); 
+                delta_d3_A = dq(10:12); 
+                delta_d1_B = dq(16:18); 
+                delta_d2_B = dq(19:21); 
+                delta_d3_B = dq(22:24); 
+                beam = obj.beam_elements(i); 
+                beam.update_params(dx1, dx2, delta_d1_A, delta_d2_A, delta_d3_A, delta_d1_B, delta_d2_B, delta_d3_B)
+            end
+        end
+        
+        % update beam lambda multipliers at each node. 
+        function update_beam_lambdas(obj, delta_lambdas)
+            for i=1:obj.n_elements
+                i_start = 1 + (i - 1) * obj.constraint_per_node; 
+                i1 = i_start - 1 + 1 * obj.constraint_per_node; 
+                i2 = i_start - 1 + 2 * obj.constraint_per_node;
+                beam = obj.beam_elements(i); 
+                delta_lambda_A = delta_lambdas(i_start:i1); 
+                delta_lambda_B = delta_lambdas(i1 + 1:i2); 
+                beam.update_lambda(delta_lambda_A, delta_lambda_B); 
+            end
         end
 
         % update the beam parameters. 

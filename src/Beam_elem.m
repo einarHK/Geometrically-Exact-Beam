@@ -17,15 +17,25 @@ classdef Beam_elem < handle
         lambda_Bt % lagrange multipliers - node 2. 
         x1_t % time dependent x1 pos - node 1. 
         x2_t % time dependent x2 pos - node 2. 
+        v1_t % time dependent velocity vector - node 1. 
+        v2_t % time dependent velocity vector - node 2. 
         d1_At % time dependent d1 director node 1. 
         d2_At % time dependent d2 director node 1. 
         d3_At % time dependent d3 director node 1
         d1_Bt % time dependent d1 director node 2. 
         d2_Bt % time dependent d2 director node 2. 
         d3_Bt % time dependent d3 director node 2. 
+        w1_At % director velocity 1 node 1. 
+        w2_At % director velocity 2 node 1. 
+        w3_At % director velocity 3 node 1. 
+        w1_Bt % director velocity 1 node 2. 
+        w2_Bt % director velocity 2 node 2. 
+        w3_Bt % director velocity 3 node 2. 
         fixed_dof % fixed degrees of freedom. 
         gamma_ref % reference axial strain vector. 
         omega_ref % reference curvature strain vector. 
+        e0 % reference strain variable. 
+        s0 % reference stress variable. 
     end
 
     methods
@@ -55,6 +65,14 @@ classdef Beam_elem < handle
             obj.fixed_dof = fixed_dof;
             obj.gamma_ref = gamma_ref; 
             obj.omega_ref = omega_ref; 
+            obj.v1_t = zeros(3,1); % assume 0 at start. 
+            obj.v2_t = zeros(3,1); 
+            obj.w1_At = zeros(3,1); 
+            obj.w2_At = zeros(3,1); 
+            obj.w3_At = zeros(3,1); 
+            obj.w1_Bt = zeros(3,1); 
+            obj.w2_Bt = zeros(3,1); 
+            obj.w3_Bt = zeros(3,1); 
         end
         
         % returns Gauss quadrature points and weights. 
@@ -198,9 +216,9 @@ classdef Beam_elem < handle
         function omega = compute_omega(obj, s)
             n1 = obj.compute_N1(s); 
             n2 = obj.compute_N2(s);
-            dn1 = obj.compute_dN1();
+            dn1 = obj.compute_dN1(); 
             dn2 = obj.compute_dN2();
-            d1 = n1 * obj.d1_At + n2 * obj.d1_Bt;
+            d1 = n1 * obj.d1_At + n2 * obj.d1_Bt; % interpolate the d_i vectors. 
             d2 = n1 * obj.d2_At + n2 * obj.d2_Bt;
             d3 = n1 * obj.d3_At + n2 * obj.d3_Bt;
             delta_d1 = dn1 * obj.d1_At + dn2 * obj.d1_Bt;
@@ -222,7 +240,7 @@ classdef Beam_elem < handle
         % computes the stresses for the given beam. 
         function s = compute_s(obj, s, C, gamma_ref, omega_ref)
             e = obj.compute_e(s, gamma_ref, omega_ref); 
-            s = C * e; % constitutive material law. 
+            s = C * e; % linear constitutive material law. 
         end
 
         % computes B1 part of B matrix. 
@@ -263,55 +281,7 @@ classdef Beam_elem < handle
             B1 = obj.compute_B1(s); 
             B2 = obj.compute_B2(s); 
             B = B1 + B2; 
-        end
-
-        % computes the strain matrix given a displacement vector. 
-        function B = compute_B_displacement(obj, u_displacement, s)
-            delta_x1 = u_displacement(1:3); % x1 node displacement. 
-            delta_d1_A = u_displacement(4:6); % director d1 at node 1 displacement. 
-            delta_d2_A = u_displacement(7:9); % director d2 at node 1 displacement. 
-            delta_d3_A = u_displacement(10:12); % director d3 at node 1 displacement. 
-            delta_x2 = u_displacement(13:15); % x2 node displacement. 
-            delta_d1_B = u_displacement(16:18); % director d1 at node 2 displacement. 
-            delta_d2_B = u_displacement(19:21); % director d2 at node 2 displacement. 
-            delta_d3_B = u_displacement(22:24); % director d3 at node 2 displacment. 
-            
-            % interpolate the displacement values. 
-            n1 = obj.compute_N1(s); 
-            n2 = obj.compute_N2(s); 
-            dn1 = obj.compute_dN1();
-            dn2 = obj.compute_dN2();
-            delta_x = n1 * delta_x1 + n2 * delta_x2; 
-            delta_d1 = n1 * delta_d1_A + n2 * delta_d1_B;
-            delta_d2 = n1 * delta_d2_A + n2 * delta_d2_B; 
-            delta_d3 = n1 * delta_d3_A + n2 * delta_d3_B; 
-            dx_ds = dn1 * delta_x1 + dn2 * delta_x2;
-            dd1_ds = dn1 * delta_d1_A + dn2 * delta_d2_B; 
-            dd2_ds = dn1 * delta_d2_A + dn2 * delta_d2_B; 
-            dd3_ds = dn1 * delta_d3_A + dn2 * delta_d3_B; 
-            Z13 = zeros(1,3);
-
-            B1_1 = [transpose(delta_d1), Z13, Z13, Z13];
-            B1_2 = [transpose(delta_d2), Z13, Z13, Z13]; 
-            B1_3 = [transpose(delta_d3), Z13, Z13, Z13];
-            B1_4 = [Z13, Z13, 0.5 * transpose(delta_d3), -0.5 * transpose(delta_d2)];
-            B1_5 = [Z13, -0.5 * transpose(delta_d3), Z13, 0.5 * transpose(delta_d1)];
-            B1_6 = [Z13, 0.5 * transpose(delta_d2), -0.5 * transpose(delta_d1), Z13]; 
-            dQ = obj.compute_dQ();
-            B1 = [B1_1; B1_2; B1_3; B1_4; B1_5; B1_6] * dQ; 
-            
-            B2_1 = [Z13, transpose(dx_ds), Z13, Z13]; 
-            B2_2 = [Z13, Z13, transpose(dx_ds), Z13]; 
-            B2_3 = [Z13, Z13, Z13, transpose(dx_ds)];
-            B2_4 = [Z13, Z13, -0.5 * transpose(dd3_ds), 0.5 * transpose(dd2_ds)]; 
-            B2_5 = [Z13, 0.5 * transpose(dd3_ds), Z13, -0.5 * transpose(dd1_ds)]; 
-            B2_6 = [Z13, -0.5 * transpose(dd2_ds), 0.5 * transpose(dd1_ds), Z13]; 
-            Q = obj.compute_Q(s); 
-            B2 = [B2_1; B2_2; B2_3; B2_4; B2_5; B2_6] * Q; 
-
-            B = B1 + B2; 
-        end
-
+        end       
 
         % computes D_gamma differential operator. 
         % Input: 24x1 vector. 
@@ -343,41 +313,6 @@ classdef Beam_elem < handle
             U23 = [s2 * I3, Z3, Z3, Z3]; 
             U24 = [s3 * I3, Z3, Z3, Z3]; 
             U2_bar = [U21; U22; U23; U24]; 
-        end
-
-        function U2_bar = compute_U2_bar_displacement(obj, u_displacement, C, s)
-            delta_x1 = u_displacement(1:3); % x1 node displacement. 
-            delta_d1_A = u_displacement(4:6); % director d1 at node 1 displacement. 
-            delta_d2_A = u_displacement(7:9); % director d2 at node 1 displacement. 
-            delta_d3_A = u_displacement(10:12); % director d3 at node 1 displacement. 
-            delta_x2 = u_displacement(13:15); % x2 node displacement. 
-            delta_d1_B = u_displacement(16:18); % director d1 at node 2 displacement. 
-            delta_d2_B = u_displacement(19:21); % director d2 at node 2 displacement. 
-            delta_d3_B = u_displacement(22:24); % director d3 at node 2 displacment.
-            
-            n1 = obj.compute_N1(s); 
-            n2 = obj.compute_N2(s); 
-
-            % compute e=e(q). 
-            x1 = n1 * delta_x1 + n2 * delta_x2; 
-            d1 = n1 * delta_d1_A + n2 * delta_d1_B; 
-            d2 = n1 * delta_d2_A + n2 * delta_d2_B; 
-            d3 = n1 * delta_d3_A + n3 * delta_d3_B; 
-            
-            gamma1 = transpose(d1) * x1; % gamma 1 value.  
-            gamma2 = transpose(d2) * x1; % gamma 2 value. 
-            gamma3 = transpose(d3) * x1; % gamma 3 value. 
-            gamma = [gamma1; gamma2; gamma3]; 
-            omega1 = 0.5 * (transpose(d3)*d2 - transpose(d2)*d3);
-            omega2 = 0.5 * (transpose(d1)*d3 - transpose(d3)*d1);
-            omega3 = 0.5 * (transpose(d2)*d1 - transpose(d1)*d2);
-            omega = [omega1; omega2; omega3]; 
-
-            e = [gamma - obj.gamma_ref; omega - obj.omega_ref]; 
-            s_vector = C * e; 
-
-            U2_bar = obj.compute_U2_bar(s_vector); 
-
         end
 
         % computes U2_hat. 
@@ -459,117 +394,8 @@ classdef Beam_elem < handle
                 U2 = (transpose(D_gamma) * U2_bar * D_gamma + transpose(D_omega) * U2_hat * D_omega) * (dx * weight); 
             end
         end
+       
         
-        % computes U2 - given displacement field u_displacement of
-        % parameters. 
-        function U2 = compute_U2_integral_displacement(obj, n_gauss_points, u_displacement, C)
-            [weights, points ] = obj.gauss_quadrature(n_gauss_points);
-            U2 = zeros(2*obj.dof, 2*obj.dof);
-            dx = obj.L0/2; 
-            dx1 = u_displacement(1:3); 
-            delta_d1_A = u_displacement(4:6); 
-            delta_d2_A = u_displacement(7:9); 
-            delta_d3_A = u_displacement(10:12); 
-            dx2 = u_displacement(13:15); 
-            delta_d1_B = u_displacement(16:18); 
-            delta_d2_B = u_displacement(19:21); 
-            delta_d3_B = u_displacement(22:24); 
-            
-            for i=1:length(weights)
-                weight = weights(i); 
-                point = points(i); 
-                D_gamma = obj.compute_D_gamma(point);
-                D_omega = obj.compute_D_omega(point);
-                n1 = obj.compute_N1(point); 
-                n2 = obj.compute_N2(point); 
-                x = n1 * dx1 + n2 * dx2; 
-                d1 = n1 * delta_d1_A + n2 * delta_d1_B; 
-                d2 = n2 * delta_d2_A + n2 * delta_d2_B; 
-                d3 = n1 * delta_d3_A + n2 * delta_d3_B; 
-                gamma1 = transpose(d1) * x; % gamma 1 value.  
-                gamma2 = transpose(d2) * x; % gamma 2 value. 
-                gamma3 = transpose(d3) * x; % gamma 3 value. 
-                gamma = [gamma1; gamma2; gamma3]; 
-                omega1 = 0.5 * (transpose(d3)*d2 - transpose(d2)*d3);
-                omega2 = 0.5 * (transpose(d1)*d3 - transpose(d3)*d1);
-                omega3 = 0.5 * (transpose(d2)*d1 - transpose(d1)*d2);
-                omega = [omega1; omega2; omega3]; 
-
-                e = [gamma - obj.gamma_ref; omega - obj.omega_ref]; 
-                s_vector = C * e; 
-                
-                U2_bar = obj.compute_U2_bar(s_vector); 
-                U2_hat = obj.compute_U2_hat_2(s_vector); 
-                U2 = (transpose(D_gamma) * U2_bar * D_gamma + transpose(D_omega) * U2_hat * D_omega) * (dx * weight);
-
-            end
-        end
-        
-        % computes e = e(q) given displacement u_displacement. 
-        function e = compute_e_displacement(obj, u_displacement, s)
-            delta_x1 = u_displacement(1:3); 
-            delta_d1_A = u_displacement(4:6); 
-            delta_d2_A = u_displacement(7:9); 
-            delta_d3_A = u_displacement(10:12); 
-            delta_x2 = u_displacement(13:15); 
-            delta_d1_B = u_displacement(16:18); 
-            delta_d2_B = u_displacement(19:21); 
-            delta_d3_B = u_displacement(22:24); 
-
-            n1 = obj.compute_N1(s); 
-            n2 = obj.compute_N2(s); 
-
-            x1 = n1 * delta_x1 + n2 * delta_x2; 
-            d1 = n1 * delta_d1_A + n2 * delta_d1_B; 
-            d2 = n1 * delta_d2_A + n2 * delta_d2_B; 
-            d3 = n1 * delta_d3_A + n2 * delta_d3_B; 
-            
-            gamma1 = transpose(d1) * x1; % gamma 1 value.  
-            gamma2 = transpose(d2) * x1; % gamma 2 value. 
-            gamma3 = transpose(d3) * x1; % gamma 3 value. 
-            gamma = [gamma1; gamma2; gamma3]; 
-            omega1 = 0.5 * (transpose(d3)*d2 - transpose(d2)*d3);
-            omega2 = 0.5 * (transpose(d1)*d3 - transpose(d3)*d1);
-            omega3 = 0.5 * (transpose(d2)*d1 - transpose(d1)*d2);
-            omega = [omega1; omega2; omega3]; 
-
-            e = [gamma - obj.gamma_ref; omega - obj.omega_ref];
-        end
-        
-        function Kt_m = compute_Kt_m_displacement(obj, u_displacement, n_gauss_points, C)
-            Kt_m = zeros(obj.dof * 2, obj.dof * 2);
-            [weights, points] = obj.gauss_quadrature(n_gauss_points);
-            dx = obj.L0 / 2; 
-            for i=1:length(weights) 
-                weight = weights(i);
-                point = points(i);
-                B = obj.compute_B_displacement(u_displacement, point); 
-                Kt_m = Kt_m + (transpose(B) * C * B) * (weight * dx);  
-            end
-        end
-
-        % computes Kt - displacement field u_displacement as input. 
-        function Kt = compute_Kt_displacement(obj, u_displacement, n_gauss_points, C)
-            U2 = obj.compute_U2_integral_displacement(n_gauss_points, u_displacement, C); 
-            Kt_m = obj.compute_Kt_m(n_gauss_points, C); 
-            Kt = U2 + Kt_m;
-        end
-
-        % internal force - displacement field u_displacement as input. 
-        function f_int = compute_f_int_u_displacement(obj, u_displacement, n_gauss_points, C)
-            [weights, points] = obj.gauss_quadrature(n_gauss_points);
-            f_int = zeros(2 * obj.dof, 1); 
-            dx = obj.L0 / 2; 
-            for i=1:length(weights)
-                weight = weights(i);
-                point = points(i); 
-                B = obj.compute_B_displacement(u_displacement, point); 
-                e = obj.compute_e_displacement(u_displacement, point); 
-                s_vector = C * e; 
-                f_int = f_int + (transpose(B) * s_vector) * (dx * weight);
-            end
-        end
-
         % computes h - node 1. 
         function h1 = compute_h1(obj)
             d1 = obj.d1_At;
@@ -597,27 +423,9 @@ classdef Beam_elem < handle
             h26 = 2 * transpose(d1) * d2; 
             h2 = 0.5 * [h21; h22; h23; h24; h25; h26];
         end
-
-        % computes the jacobian of h(q)
-        function H = compute_H(obj, s)
-            n1 = obj.compute_N1(s); 
-            n2 = obj.compute_N2(s); 
-            d1 = n1 * obj.d1_At + n2 * obj.d1_Bt; 
-            d2 = n1 * obj.d2_At + n2 * obj.d2_Bt; 
-            d3 = n1 * obj.d3_At + n2 * obj.d3_Bt;
-            z13 = zeros(1,3);
-            H1 = [z13, d1', z13, z13]; 
-            H2 = [z13, z13, d2', z13]; 
-            H3 = [z13, z13, z13, d3'];
-            H4 = [z13, z13, d3', d2']; 
-            H5 = [z13, d3', z13, d1']; 
-            H6 = [z13, d2', d1', z13]; 
-            H = [H1; H2; H3; H4; H5; H6];
-            Q = obj.compute_Q(s); % interpolation matrix - input 24x1 vector. 
-            H = H * Q; 
-        end
         
         % computes jacobian of the h vector - for node 1. 
+        % computed at nodal level. 
         function H = compute_H_node1(obj)
             d1 = obj.d1_At; 
             d2 = obj.d2_At;
@@ -632,45 +440,11 @@ classdef Beam_elem < handle
             H = [H1; H2; H3; H4; H5; H6];
         end
         
-        function H = compute_H_node1_u_displacement(obj, u_displacement) 
-            delta_d1 = u_displacement(4:6); 
-            delta_d2 = u_displacement(7:9); 
-            delta_d3 = u_displacement(10:12); 
-            d1 = obj.d1_At + delta_d1; 
-            d2 = obj.d2_At + delta_d2;
-            d3 = obj.d3_At + delta_d3; 
-            z13 = zeros(1,3); 
-            H1 = [z13, transpose(d1), z13, z13];
-            H2 = [z13, z13, transpose(d2), z13]; 
-            H3 = [z13, z13, z13, transpose(d3)]; 
-            H4 = [z13, z13, transpose(d3), transpose(d2)];
-            H5 = [z13, transpose(d3), z13, transpose(d1)];
-            H6 = [z13, transpose(d2), transpose(d1), z13];
-            H = [H1; H2; H3; H4; H5; H6];
-        end
-
         % computes the jacobian of the h vector - for node 2. 
         function H = compute_H_node2(obj)
             d1 = obj.d1_Bt;
             d2 = obj.d2_Bt; 
             d3 = obj.d3_Bt;
-            z13 = zeros(1,3); 
-            H1 = [z13, transpose(d1), z13, z13]; 
-            H2 = [z13, z13, transpose(d2), z13];
-            H3 = [z13, z13, z13, transpose(d3)];
-            H4 = [z13, z13, transpose(d3), transpose(d2)];
-            H5 = [z13, transpose(d3), z13, transpose(d1)];
-            H6 = [z13, transpose(d2), transpose(d1), z13];
-            H = [H1; H2; H3; H4; H5; H6]; 
-        end
-
-        function H = compute_H_node2_displacement(obj, u_displacement)
-            delta_d1 = u_displacement(16:18); 
-            delta_d2 = u_displacement(19:21); 
-            delta_d3 = u_displacement(22:24); 
-            d1 = obj.d1_Bt + delta_d1;
-            d2 = obj.d2_Bt + delta_d2; 
-            d3 = obj.d3_Bt + delta_d3;
             z13 = zeros(1,3); 
             H1 = [z13, transpose(d1), z13, z13]; 
             H2 = [z13, z13, transpose(d2), z13];
@@ -690,18 +464,10 @@ classdef Beam_elem < handle
             H = [H1, Z; Z, H2]; % size 12 x 24
         end
 
-        function H = compute_H_tot_displacement(obj, u_displacement)
-            H1 = obj.compute_H_node1_u_displacement(u_displacement); % H matrix - node 1. 
-            H2 = obj.compute_H_node1_u_displacement(u_displacement); % H matrix - node 2. 
-            [n_rows, n_cols] = size(H1); % [6, 12] 
-            Z = zeros(n_rows, n_cols); % zero matrix 12x6. 
-            H = [H1, Z; Z, H2]; % size 12 x 24
-        end
-
         % computes the internal force vector. 
         function f_int = compute_f_int(obj, n_gauss_points, C, gamma_ref, omega_ref)
             [weights, points] = obj.gauss_quadrature(n_gauss_points);
-            f_int = zeros(2*obj.dof, 1); % 12 x 1. 
+            f_int = zeros(2*obj.dof, 1); % 24 x 1. 
             % f_int = zeros(2*obj.dof, 1); % initialize force vector - dimensions 12x1, 6x1 for each node. 
             dx = obj.L0/2; 
             for i=1:n_gauss_points
@@ -725,44 +491,12 @@ classdef Beam_elem < handle
             f_H = transpose(H) * obj.lambda_At; % compute the force. 
         end
 
-        function f_H = compute_f_H1_displacement(obj, u_displacement) 
-            delta_lambda_A = u_displacement(25:30); 
-            H = obj.compute_H_node1(); % compute the jacobian of h at node 1.
-            f_H = transpose(H) * (obj.lambda_At + delta_lambda_A); % compute the force. 
-        end
-
         % computes the force coming from the constraint at the discrete
         % nodes - node 2.
         function f_H = compute_f_H2(obj)
             H = obj.compute_H_node2(); % compute the jacobian of h at node 1.
             f_H = transpose(H) * obj.lambda_Bt; % compute the force. 
         end 
-
-        function f_H = compute_f_H2_displacement(obj, u_displacement) 
-            delta_lambda_B = u_displacement(31:36); 
-            H = obj.compute_H_node2(); % compute the jacobian of h at node 1.
-            f_H = transpose(H) * (obj.lambda_Bt + delta_lambda_B); % compute the force. 
-        end 
-
-        % computes the V = V(v) matrix, defined as 
-        %  d(H^T * X)/dq. 
-        function V = compute_V(obj, s, lambda)
-            v1 = lambda(1); 
-            v2 = lambda(2); 
-            v3 = lambda(3); 
-            v4 = lambda(4); 
-            v5 = lambda(5); 
-            v6 = lambda(6); 
-            Q = obj.compute_Q(s); 
-            I3 = eye(3); 
-            Z3 = zeros(3,3);
-            V1 = [Z3, Z3, Z3, Z3]; 
-            V2 = [Z3, I3 * v1, I3 * v6, I3 * v5]; 
-            V3 = [Z3, I3 * v6, I3 * v2, I3 * v4]; 
-            V4 = [Z3, I3 * v5, I3 * v4, I3 * v3];
-            V = [V1; V2; V3; V4]; 
-            V = Q' * V * Q; % multiply by Q, since input is vector of 24x1 (interpolation). 
-        end
 
         % computes the V matrix - for node 1. 
         function V1 = compute_V1(obj)
@@ -782,23 +516,6 @@ classdef Beam_elem < handle
             V1 = [V11; V12; V13; V14]; 
         end
 
-        function V1 = compute_V1_displacement(obj, u_displacement) 
-            lambda_A = u_displacement(25:30); 
-            lambda = (obj.lambda_At + lambda_A); % lambda vector at node 1. 
-            v1 = lambda(1); 
-            v2 = lambda(2); 
-            v3 = lambda(3); 
-            v4 = lambda(4); 
-            v5 = lambda(5); 
-            v6 = lambda(6);
-            Z3 = zeros(3,3); 
-            I3 = eye(3);
-            V11 = [Z3, Z3, Z3, Z3];
-            V12 = [Z3, v1 * I3, v6 * I3, v5 * I3]; 
-            V13 = [Z3, v6 * I3, v2 * I3, v4 * I3]; 
-            V14 = [Z3, v5 * I3, v4 * I3, v3 * I3];
-            V1 = [V11; V12; V13; V14]; 
-        end
         
         % computes the (dH^T/dq * v) matrix for node 2. 
         function V2 = compute_V2(obj)
@@ -818,36 +535,10 @@ classdef Beam_elem < handle
             V2 = [V21; V22; V23; V24]; 
         end
 
-        % computes the (dH^T/dq * v) matrix for node 2. 
-        function V2 = compute_V2_displacement(obj, u_displacement) 
-            Z3 = zeros(3,3); 
-            lambda_B = u_displacement(31:36); 
-            lambda = obj.lambda_Bt + lambda_B; 
-            v1 = lambda(1);
-            v2 = lambda(2); 
-            v3 = lambda(3); 
-            v4 = lambda(4);
-            v5 = lambda(5); 
-            v6 = lambda(6); 
-            I3 = eye(3);
-            V21 = [Z3, Z3, Z3, Z3];
-            V22 = [Z3, v1 * I3, v6 * I3, v5 * I3]; 
-            V23 = [Z3, v6 * I3, v2 * I3, v4 * I3]; 
-            V24 = [Z3, v5 * I3, v4 * I3, v3 * I3]; 
-            V2 = [V21; V22; V23; V24]; 
-        end
-
         % computes the total dH^T/dq matrix for the beam element. 
         function V = compute_V_tot(obj)
             V1 = obj.compute_V1(); % node 1. 
             V2 = obj.compute_V2(); % node 2. 
-            Z12 = zeros(obj.dof, obj.dof); % zero matrix of size 12x12. 
-            V = [V1, Z12; Z12, V2]; 
-        end
-
-        function V = compute_V_tot_displacement(obj, u_displacement)
-            V1 = obj.compute_V1_displacement(u_displacement); % node 1. 
-            V2 = obj.compute_V2_displacement(u_displacement); % node 2. 
             Z12 = zeros(obj.dof, obj.dof); % zero matrix of size 12x12. 
             V = [V1, Z12; Z12, V2]; 
         end
@@ -899,16 +590,61 @@ classdef Beam_elem < handle
             S = [S11, S12; S21, S22];
         end
         
-        function S = compute_S_mat_displacement(obj, u_displacement, n_gauss_points, C)
-            Kt = obj.compute_Kt_displacement(u_displacement, n_gauss_points, C);
-            dHv_dq = obj.compute_V_tot_displacement(u_displacement);  
-            S11 = Kt + dHv_dq; % size 24x24
-            S21 = obj.compute_H_tot_displacement(u_displacement); % size 24x12
-            S12 = transpose(S21); % size 12x24
-            [rows_S12, cols_S12] = size(S12);
-            [rows_S21, cols_S21] = size(S21); 
-            S22 = zeros(rows_S21, cols_S12); % size 24x12.
-            S = [S11, S12; S21, S22];
+        
+        % assumes e and s have dimensions 6 for each element - not as nodal
+        % point values. 
+        function S = compute_full_S_mat(obj, s_point, n_gauss_points, C, gamma_ref, omega_ref)
+            % r = B(q)^T * s + H(q)^T * X - f_ext.
+            % derivative of r w.r.t q. 
+            dr_dq = obj.compute_U2_integral_2(n_gauss_points, C, gamma_ref, omega_ref) + obj.compute_V_tot(); 
+            % derivative of r w.r.t e.
+            dr_de = zeros(2 * obj.dof, 6); % assuming e has dim 6. 
+            % derivative of r w.r.t s. 
+            dx = obj.L0 / 2; 
+            [weights, points] = obj.gauss_quadrature(n_gauss_points);
+            dr_ds = zeros(24,6); 
+            for i=1:n_gauss_points
+                point = points(i); 
+                weight = weights(i); 
+                B = obj.compute_B(point); 
+                dr_ds = dr_ds + transpose(B) * (dx * weight);
+            end
+            % derivative of r w.r.t lambda. 
+            H = obj.compute_H_tot();
+            dr_dLambda = transpose(H);
+            S1 = [dr_dq, dr_de, dr_ds, dr_dLambda]; 
+            % derivative of f(e,e(q)) = e - e(q) w.r.t e. 
+            df_de = eye(6); 
+            % derivative of f w.r.t q. 
+            df_dq = -obj.compute_B(s_point); 
+            % derivative of f w.r.t s. 
+            df_ds = zeros(6,6); 
+            % derivative of f w.r.t lambda. 
+            df_dLambda = zeros(6,2 * obj.n_constraints); 
+            % S2 row. 
+            S2 = [df_dq, df_de, df_ds, df_dLambda]; 
+            % derivative of g(e,s) w.r.t q. 
+            dg_dq = zeros(6, 2 * obj.dof);
+            % derivative of g(e,s) w.r.t e. 
+            dg_de = -C; 
+            % derivative of g(e,s) w.r.t s. 
+            dg_ds = eye(6); 
+            % derivative of g(e,s) w.r.t lambda. 
+            dg_dLambda = zeros(6, 2 * obj.n_constraints); 
+            % S3 row. 
+            S3 = [dg_dq, dg_de, dg_ds, dg_dLambda]; 
+            % derivative of h w.r.t q. 
+            dh_dq = obj.compute_H_tot(); 
+            % derivative of h w.r.t e. 
+            dh_de = zeros(2 * obj.n_constraints, 6); 
+            % derivative of h w.r.t s. 
+            dh_ds = zeros(2 * obj.n_constraints, 6); 
+            % derivative of h w.r.t lambda. 
+            dh_dLambda = zeros(2 * obj.n_constraints, 2*obj.n_constraints);
+            % S4 row. 
+            S4 = [dh_dq, dh_de, dh_ds, dh_dLambda]; 
+            % S matrix. 
+            S = [S1; S2; S3; S4]; 
         end
 
         % computes the residual vector for the forces. 
@@ -931,46 +667,7 @@ classdef Beam_elem < handle
             h2 = obj.compute_h2(); % restriction - node 2.  
             h_q = [h1; h2]; 
         end
-        
-        function h1 = compute_h1_displacement(obj, u_displacement)
-            delta_d1 = u_displacement(4:6); 
-            delta_d2 = u_displacement(7:9); 
-            delta_d3 = u_displacement(10:12); 
-            d1 = obj.d1_At + delta_d1;
-            d2 = obj.d2_At + delta_d2; 
-            d3 = obj.d3_At + delta_d3; 
-            h11 = transpose(d1) * d1 - 1; 
-            h12 = transpose(d2) * d2 - 1; 
-            h13 = transpose(d3) * d3 - 1; 
-            h14 = 2 * transpose(d2) * d3;
-            h15 = 2 * transpose(d1) * d3; 
-            h16 = 2 * transpose(d1) * d2; 
-            h1 = 0.5 * [h11; h12; h13; h14; h15; h16]; 
-
-        end
-
-        function h2 = compute_h2_displacement(obj, u_displacement)
-            delta_d1 = u_displacement(16:18); 
-            delta_d2 = u_displacement(19:21); 
-            delta_d3 = u_displacement(22:24); 
-            d1 = obj.d1_Bt + delta_d1;
-            d2 = obj.d2_Bt + delta_d2; 
-            d3 = obj.d3_Bt + delta_d3; 
-            h11 = transpose(d1) * d1 - 1; 
-            h12 = transpose(d2) * d2 - 1; 
-            h13 = transpose(d3) * d3 - 1; 
-            h14 = 2 * transpose(d2) * d3;
-            h15 = 2 * transpose(d1) * d3; 
-            h16 = 2 * transpose(d1) * d2; 
-            h2 = 0.5 * [h11; h12; h13; h14; h15; h16]; 
-        end
-
-        function h_q = compute_h_q_displacement(obj, u_displacement)
-            h1 = obj.compute_h1_displacement(u_displacement);   
-            h2 = obj.compute_h2_displacement(u_displacement); 
-            h_q = [h1;h2]; 
-        end
-
+       
         % computes the right hand side vector for the linearized system of
         % equations. dimensions are (24 + 12) x 1 = 36x1. 
         function rhs = compute_rhs(obj, n_gauss_points, C, gamma_ref, omega_ref, f_ext)
@@ -999,7 +696,20 @@ classdef Beam_elem < handle
             obj.lambda_At = obj.lambda_At + delta_lambda_A;
             obj.lambda_Bt = obj.lambda_Bt + delta_lambda_B;
         end
+        
+         % updates the values of the velocity parameters. 
+        function update_velocity_params(obj, v1, v2, w1_At, w2_At, w3_At, w1_Bt, w2_Bt, w3_Bt)
+            obj.v1_t = v1; % velocity at node 1. 
+            obj.v2_t = v2; % velocity at node 2. 
+            obj.w1_At = w1_At; % rotation velocity node 1, director 1. 
+            obj.w2_At = w2_At; % rotation velocity node 1, director 2. 
+            obj.w3_At = w3_At; % rotation velocity node 1, director 3. 
+            obj.w1_Bt = w1_Bt; % rotation velocity node 2, director 1. 
+            obj.w2_Bt = w2_Bt; % rotation velocity node 2, director 2. 
+            obj.w3_Bt = w3_Bt; % rotation velocity node 2, director 3. 
+        end
 
+        % updates the configuration of the beam. 
         function update_config(obj, delta_u)
             dx1 = delta_u(1:3); 
             delta_d1_A = delta_u(4:6); 

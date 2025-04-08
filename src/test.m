@@ -1,90 +1,187 @@
 
-clear;
+clear; 
 clc; 
+% Axial elongation - 4 nonlinear equations solver. 
 %% CONSTANTS. 
-L = 1;
-x1 = [0, 0, 0]'; 
-x2 = [L, 0, 0]';
-d3 = [1, 0, 0]'; % axial director. 
-d2 = [0, 1, 0]'; % shear directors 2, 1. 
-d1 = [0, 0, 1]'; 
-dof = 12;  
-n_constraints = 6;
-lambda = zeros(n_constraints,1);
-s = 0; 
+n_elems = 1; % number of beam elements. 
+L = 2; % initial length. 
+x1 = transpose([0, 0, 0]); % start coordinate. 
+x2 = transpose([L, 0, 0]); % end coordinate. 
 
-fixed_dof = 1:12; % set first node fixed, for all kinematic variables.
-fixed_const = 2*dof+1:2*dof+n_constraints; % fixed constraints at first node. 
-all_dof = 1:2*dof + 2*n_constraints; % all dofs + constraints. 
+dof = 12; % kinematic degrees of freedom per node. 
+fixed_dof = 12; % fix the kinematic dof at the first node. 
+n_constraints = 6; % number of constraints per node. 
+lambda = zeros(n_constraints,1); % lambda multipliers per node - initialized as zeros. 
 
-% free degrees of freedom. 
-free_dof = setdiff(all_dof, [fixed_dof, fixed_const]);
+% lambda multipliers for all beam elements. 
+lambdas = repmat(lambda, 1, n_elems+1); 
+% kinematic dof for each beam element. 
+beam_dofs = repmat(dof, 1, n_elems +1);
+% constraints for each beam element. 
+beam_constraints = repmat(n_constraints, 1, n_elems + 1);
+% the fixed dof for each beam element. 
+beam_fixed_dofs = zeros(1, n_elems + 1);
+beam_fixed_dofs(1) = fixed_dof;
+d1 = transpose([0, 0, 1]); 
+d2 = transpose([0, 1, 0]); 
+d3 = transpose([1, 0, 0]); 
+d_vector = [d1;d2;d3]; 
+beam_directors = repmat(d_vector, n_elems + 1); 
+
+% discretize the domain into beam coordinates, beam lengths and directors. 
+[beam_coordinates, beam_lengths] = discretize_domain(x1, x2, n_elems);
+beam_elems = create_beam_elements(n_elems, beam_coordinates, beam_directors, beam_lengths, beam_constraints, beam_dofs, beam_fixed_dofs, lambdas);
+
+% beam elements and beam object. 
+beam = Beam(n_elems, beam_elems, dof, n_constraints); 
+
+% init e and s. 
+e0 = zeros(6 * (n_elems + 1), 1); 
+s0 = zeros(6 * (n_elems + 1), 1); 
+
+beam.init_strain_stress(e0, s0);
+%% SIMULATION. 
 % material property matrix. 
-C = eye(6);
+C = eye(6); 
 
-% reference curvature and strains. 
-gamma_ref = [0;0; 1];
-omega_ref = [0;0;0];
+load_steps = 10; 
+fx = 0; 
+fy = 1; 
+fz = 0;
 
-% create beam class object. 
-beam = Beam_elem(x1, x2, L, d3, d2, d1, d3, d2, d1, lambda, lambda, dof, n_constraints, fixed_dof, gamma_ref, omega_ref); 
-%% Axial force. 
-dof_per_node = 12; 
-f_ext = zeros(2*dof_per_node, 1); 
-Fx = 0; 
-Fy = 2; 
-Fz = 0;
-Mx = 0;
+% dimensions for the strain and stress vectors. 
+e_dim = 6; 
+s_dim = 6;
 
-% x force index. 
-node2_x = dof + 1;
+% indices for the external force. 
+indx = n_elems + 1; 
+fx_indx = (indx - 1) * beam.dof_per_node + 1; 
+fy_indx = (indx - 1) * beam.dof_per_node + 2; 
+fz_indx = (indx - 1) * beam.dof_per_node + 3;
 
-% tolerance. 
-Tol = 1e-8; % 1e-10 
-% number of gauss integration points. 
-n_gauss_points = 1;
+% total degrees of freedom - kinematic, constraints, e, s. 
+dof = (beam.n_nodes * beam.dof_per_node + beam.n_nodes * beam.constraint_per_node + beam.n_elements * e_dim + beam.n_elements * s_dim);
+% external force vector. 
+f_ext = zeros(beam.n_nodes * beam.dof_per_node, 1);
 
-% iteration count. 
-iter = 0; 
+% tolerance and max iterations. 
+TOL = 1e-6;
 max_iter = 50; 
 
-% delta_u_lambda = 1;
-% main loop. 
-verbose = 1; 
-
-load_steps = 2; 
-for i=1:load_steps
-    F_x = (Fx/load_steps) * i;
-    F_y = (Fy/load_steps) * i; 
-    F_z = (Fz/load_steps) * i; 
-    M_x = (Mx/load_steps) * i; 
-    f_ext = zeros(2*dof_per_node, 1); 
-    f_ext(node2_x) = F_x; 
-    f_ext(node2_x + 1) = F_y;
-    f_ext(node2_x + 2) = F_z; 
-    f_ext(node2_x + 5) = 2* M_x;
-    [iter] = Newtons_method(beam, n_gauss_points, C, gamma_ref, omega_ref, max_iter, Tol, free_dof, f_ext, n_constraints, verbose);
+% fixed dof. 
+fixed_nodes = [1];
+q_fixed = []; 
+lambda_fixed = []; 
+fixed_dof = []; 
+for j=1:length(fixed_nodes)
+    node_indx = fixed_nodes(j); 
+    q_vals = (node_indx - 1) * beam.dof_per_node + 1:node_indx * beam.dof_per_node;
+    lambda_indx_start = beam.dof_per_node * beam.n_nodes + beam.n_elements * 6 + beam.n_elements * 6;  
+    lambda_vals = (node_indx - 1) * beam.constraint_per_node + lambda_indx_start + 1: lambda_indx_start + node_indx * beam.constraint_per_node; 
+    fixed_dof = [fixed_dof, q_vals]; 
+    fixed_dof = [fixed_dof, lambda_vals];
 end
 
-% beam.compute_f_int_u_displacement(u_tot, 1,C)
+all_dof = 1:dof; 
+free_dof = setdiff(all_dof, fixed_dof); % free dofs.  
 
-%% plot beam. 
-x_lim = L + Fx + 1; 
-y_lim = 4 + Fy + 1; 
-z_lim = 4 + Fz + 1;
-scaling = 0;
-title = "Force at node 2: [Fx, Fy, Fz] = [" + num2str(F_x) + "N, " + num2str(F_y) + "N, " + num2str(F_z) + "N ]"; 
-output1 = "Initial Node 2 position: [" + num2str(beam.x2(1)) + "m, " +  num2str(beam.x2(2)) + "m, " +  num2str(beam.x2(3)) + "m]";
-output2 = "Node 2 position: [" + num2str(beam.x2_t(1)) + "m, " +  num2str(beam.x2_t(2)) + "m, " +  num2str(beam.x2_t(3)) + "m]";
-beam.show_config(-x_lim, x_lim, -y_lim, y_lim, -z_lim, z_lim, scaling, title, 1);
-disp(output1);
+% number of gauss points. 
+n_gauss_points = 1; 
+%% SIMULATION.
+total_iter = 0; 
+
+for i=1:load_steps
+   f_ext(fx_indx) = (i/load_steps) * fx;  
+   f_ext(fy_indx) = (i/load_steps) * fy; 
+   f_ext(fz_indx) = (i/load_steps) * fz;
+   iter = 0; 
+   % Newtons method. 
+   while (iter < max_iter)
+        iter = iter + 1; % iteration counter. 
+        delta_u = zeros(dof, 1); % solution vector. 
+        
+        % S matrix. 
+        S = beam.compute_full_S_mat(n_gauss_points, C);
+        S = S(free_dof, free_dof); 
+        
+        % rhs vector. 
+        f_int = beam.compute_f_int(n_gauss_points, C); 
+        f_H = beam.compute_f_H(); 
+        residual = f_int + f_H - f_ext; 
+        hq = beam.compute_h_q(); 
+        e_q = beam.compute_strain(); 
+        e = beam.get_strain_vector();
+        f = e - e_q; % e - e(q)
+        s = beam.get_stress_vector(); 
+        g = beam.compute_g(e, s, C); % g(e,s) = s - C*e
+        
+        rhs = [-residual; -f;  -g; -hq]; % rhs vector. 
+        rhs = rhs(free_dof); 
+        
+        % display norm and iterations. 
+        disp("Iter: " + num2str(iter) + " Error: " + num2str(norm(rhs))); 
+       
+
+        if (norm(rhs) < TOL)
+            break; 
+        end
+
+        % solve for u. 
+        delta_u(free_dof) = S \ rhs;
+        dq = delta_u(1:beam.n_nodes * beam.dof_per_node); 
+        de = delta_u(beam.n_nodes * beam.dof_per_node + 1: beam.n_nodes * beam.dof_per_node + beam.n_elements * e_dim); 
+        ds = delta_u(beam.n_nodes * beam.dof_per_node + beam.n_elements * e_dim + 1 : beam.n_nodes * beam.dof_per_node + beam.n_elements * (e_dim + s_dim)); 
+        dLambda = delta_u(beam.n_nodes * beam.dof_per_node + beam.n_elements *( e_dim + s_dim) + 1 : dof); 
+        
+
+        % update e and s. 
+        beam.update_beam_strain_stress(de, ds); 
+        % update coordinates. 
+        beam.update_beam_q(dq); 
+        % update lambdas. 
+        beam.update_beam_lambdas(dLambda); 
+   end
+   total_iter = total_iter + iter; 
+end
+
+avg_iter = total_iter / load_steps; 
+output = "Average number of iterations: " + avg_iter; 
+disp(output); 
+%% Display Strain and Stress. 
+
+% Calculate numerical displacement. 
+beam_element = beam.beam_elements(beam.n_elements); 
+dX = beam_element.x2_t - beam_element.x2; 
+% dX_size = sqrt(dot(dX, dX)); 
+
+% Calculate analytical displacement. 
+dx_analytical = fx * L; % A=1, C=1 
+dy_analytical = fy * L; % A=1, C=1
+dz_analytical = fz * L; % A=1, C=1
+
+output = "Numerical beam displacement : [Δx, Δy, Δz] = [ " + num2str(dX(1)) + "m, " + num2str(dX(2)) + "m, " + num2str(dX(3)) + "m ]";  
+output2 = "Analytical beam displacement: [Δx, Δy, Δz] = [ " + num2str(dx_analytical) + "m, " + num2str(dy_analytical) + "m, " + num2str(dz_analytical) + "m ]";
+
+disp(output); 
 disp(output2);
-beam.display_node_directors();
+%% PLOTS. 
+% 
+% e_min = -10; 
+% e_max = 10; 
+% C = 1; 
+% N_points = 100; 
+% noise = 0.1
+% [e,s] = compute_linear_stress_strain(N_points, 1, e_min, e_max, noise); 
 
-% check orhonormality condition. 
-disp(transpose(beam.d1_B) * beam.d2_B); 
-disp(transpose(beam.d1_B) * beam.d3_B);  
-disp(transpose(beam.d2_B) * beam.d3_B); 
+x_lim1 = -1; 
+x_lim2 = fx + 3; 
+y_lim1 = -1; 
+y_lim2 = 5; 
+z_lim1 = 0; 
+z_lim2 = 3; 
 
+scaling = 1; 
+scale_factor = 0.5;
+title = "Deformed beam, F = [" + num2str(fx) + "N, " + num2str(fy) + "N, " + num2str(fz) + "N]";
 
-
+beam.plot_deformed_beam(x_lim1, x_lim2, y_lim1, y_lim2, z_lim1, z_lim2, 1, title);

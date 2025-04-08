@@ -1,11 +1,12 @@
-% Quarter of a circular arc with total arc length of 1 m. 
+
+% Data driven - fixed quarter circular arc. 
 clear; 
 clc;
 %% CONSTANTS. 
 % initial beam length. 
 L = 1; 
 % number of elements. 
-n_elems = 20; 
+n_elems = 21; 
 % kinematic degrees of freedom per node. 
 dof = 12; 
 % constraints per node. 
@@ -28,12 +29,18 @@ beam_fixed_dofs(n_elems + 1) = fixed_dof;
 
 % material property matrix. 
 C = eye(6); 
-C(1,1) = 75; 
-C(2,2) = 75; 
-C(3,3) = 100; 
-C(4,4) = 100; 
-C(5,5) = 100; 
-C(6,6) = 200; 
+c11 = 75; 
+c22 = 75; 
+c33 = 100; 
+c44 = 100; 
+c55 = 100; 
+c66 = 200; 
+C(1,1) = c11; 
+C(2,2) = c22; 
+C(3,3) = c33; 
+C(4,4) = c44; 
+C(5,5) = c55; 
+C(6,6) = c66; 
 
 % discretize the domain into beam coordinates, beam lengths and directors. 
 % [beam_coordinates, beam_lengths] = discretize_domain(x1, x2, n_elems);
@@ -54,21 +61,16 @@ max_iter = 50;
 % Tolerance. 
 Tol = 1e-12; 
 
-% dimension for e. 
-e_dim = 6; 
-
 % the fixed and free nodes. 
 fixed_nodes = [1, n_elems + 1]; 
 free_dof = compute_free_dof(fixed_nodes, dof, n_constraints, n_elems + 1); 
 %% SIMULATION. 
-load_steps = 20; 
+load_steps = 1; 
 
 % force vectors. 
 f1 = transpose([-10, 0, -20]) ; 
 f2 = transpose([7.5, -7.5, 15]); 
 f3 = transpose([0, 10, -20]); 
-
-% vertical load case. 
 
 % force node positions. 
 p2x = beam.dof_per_node + 1; 
@@ -130,13 +132,23 @@ f_ext(p19x:p19z) = f_ext(p19x:p19z) + f3;
 f_ext(p20x:p20z) = f_ext(p20x:p20z) + f3; 
 
 beam.display_end_node_pos();
+
+% store the strain and stress closest to the computed ones. 
+e_data = []; 
+s_data = []; 
+% the computed strain and stress. 
+e_vals = []; 
+
 % iterate over each load step. 
 for i=1:load_steps
     force = f_ext * (i/load_steps); 
     % solve using Newton-Rhapson method. 
     [iter] = Newtons_method_beam(beam, n_gauss_points, C, max_iter, Tol, force, 1, free_dof); 
-end
+    % compute the stress and strain from this state (using the constitutive law). 
+    [e, s] = beam.compute_stress_strain(beam.beam_elements, C); 
+    
 
+end
 
 %% PLOT RESULTS. 
 % analytical solution - node 11. 
@@ -179,7 +191,7 @@ z_lim2 = 0.4;
 
 beam.plot_undeformed_state(x_lim1, x_lim2, y_lim1, y_lim2, z_lim1, z_lim2, scale, "");
 hold on; 
-beam.plot_deformed_beam(x_lim1, x_lim2, y_lim1, y_lim2, z_lim1, z_lim2, scale, "Deformed (\color{red}red\color{black}) & Undeformed (\color{blue}blue\color{black})");
+beam.plot_deformed_beam(x_lim1, x_lim2, y_lim1, y_lim2, z_lim1, z_lim2, scale, "Deformed (red) & Undeformed (blue)");
 
 node_indices = [11]; 
 
@@ -206,52 +218,3 @@ beam.display_node_directors(node_indices);
 fprintf("\n"); 
 fprintf("Relative error - Node position: ");
 fprintf("|dx|/|x| = %f , |dy|/|y| = %f , |dz|/|z| = %f \n", dx, dy, dz); 
-
-%% PLOT - Stress component for each beam. 
-
-elements = 1:n_elems; 
-[s, e] = beam.compute_stress_strain(elements, C); 
-s1 = []; 
-s2 = []; 
-s3 = []; 
-s4 = []; 
-s5 = []; 
-s6 = []; 
-
-for i=1:n_elems
-    i_start = (i - 1) * e_dim + 1;
-    i_end = i_start - 1 + e_dim; 
-    s_val = s(i_start:i_end); 
-    s1 = [s1, s_val(1)]; 
-    s2 = [s2, s_val(2)]; 
-    s3 = [s3, s_val(3)]; 
-    s4 = [s4, s_val(4)]; 
-    s5 = [s5, s_val(5)]; 
-    s6 = [s6, s_val(6)]; 
-end
-
-x_values = 1:n_elems;
-stress_components = [s1; s2; s3; s4; s5; s6];
-for i=1:6
-    figure(i+1); 
-    for j=1:n_elems
-        s_val = stress_components(i,j);
-        x_val = x_values(j); 
-        plot([x_val, x_val], [0, s_val], color="blue", LineWidth=1); 
-        hold on; 
-        scatter(x_val, s_val, MarkerEdgeColor="blue");
-        hold on;
-    end
-    xlabel("Beam element [#]"); 
-    if (i < 4)
-        ylabel("Stress resultant component " + num2str(i) + " [N/m]");
-    else
-        ylabel("Stress resultant component " + num2str(i) + " [N]");
-    end
-    xlim([-1, n_elems + 2]);
-    hold off; 
-    grid on; 
-end
-
-
-

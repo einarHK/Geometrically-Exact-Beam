@@ -14,7 +14,7 @@ function [iter] = Newtons_method(beam, n_gauss_points, C, gamma_ref, omega_ref, 
         % compute S matrix. 
         S = beam.compute_S_mat(n_gauss_points, C, gamma_ref, omega_ref); 
         S = S(free_dof, free_dof); 
-        disp(cond(S));
+        % disp(cond(S));
       
         % compute the force terms. 
         f_int = beam.compute_f_int(n_gauss_points, C, gamma_ref, omega_ref); % internal force term. 

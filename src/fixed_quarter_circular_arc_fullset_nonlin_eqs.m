@@ -1,11 +1,12 @@
 % Quarter of a circular arc with total arc length of 1 m. 
+% Solving using full set nonlinear equations (compatibility + constitutive)
 clear; 
 clc;
 %% CONSTANTS. 
 % initial beam length. 
 L = 1; 
 % number of elements. 
-n_elems = 20; 
+n_elems = 21; 
 % kinematic degrees of freedom per node. 
 dof = 12; 
 % constraints per node. 
@@ -60,15 +61,19 @@ e_dim = 6;
 % the fixed and free nodes. 
 fixed_nodes = [1, n_elems + 1]; 
 free_dof = compute_free_dof(fixed_nodes, dof, n_constraints, n_elems + 1); 
+
+% initial stress strain. 
+e0 = zeros(6 * (n_elems + 1), 1); 
+s0 = zeros(6 * (n_elems + 1), 1); 
+
+beam.init_strain_stress(e0, s0);
 %% SIMULATION. 
-load_steps = 20; 
+load_steps = 1; 
 
 % force vectors. 
 f1 = transpose([-10, 0, -20]) ; 
 f2 = transpose([7.5, -7.5, 15]); 
 f3 = transpose([0, 10, -20]); 
-
-% vertical load case. 
 
 % force node positions. 
 p2x = beam.dof_per_node + 1; 
@@ -129,14 +134,63 @@ f_ext(p18x:p18z) = f_ext(p18x:p18z) + f3;
 f_ext(p19x:p19z) = f_ext(p19x:p19z) + f3; 
 f_ext(p20x:p20z) = f_ext(p20x:p20z) + f3; 
 
+e_dim = 6; 
+s_dim = 6; 
+
 beam.display_end_node_pos();
 % iterate over each load step. 
 for i=1:load_steps
     force = f_ext * (i/load_steps); 
     % solve using Newton-Rhapson method. 
-    [iter] = Newtons_method_beam(beam, n_gauss_points, C, max_iter, Tol, force, 1, free_dof); 
-end
+    iter = 0;
+    % [iter] = Newtons_method_beam(beam, n_gauss_points, C, max_iter, Tol, force, 1, free_dof); 
+    while (iter < max_iter)
+            
+        iter = iter + 1; % iteration counter. 
+        delta_u = zeros(beam.n_nodes * beam.dof_per_node + beam.n_nodes * beam.constraint_per_node + beam.n_elements * (e_dim + s_dim), 1); % solution vector. 
+        
+        % S matrix. 
+        S = beam.compute_full_S_mat(n_gauss_points, C);
+        S = S(free_dof, free_dof); 
+        
+        % rhs vector. 
+        f_int = beam.compute_f_int(n_gauss_points, C); 
+        f_H = beam.compute_f_H(); 
+        residual = f_int + f_H - f_ext; 
+        hq = beam.compute_h_q(); 
+        e_q = beam.compute_strain(); 
+        e = beam.get_strain_vector();
+        f = e - e_q; % e - e(q)
+        s = beam.get_stress_vector(); 
+        g = beam.compute_g(e, s, C); % g(e,s) = s - C*e
+        
+        rhs = [-residual; -f;  -g; -hq]; % rhs vector. 
+        rhs = rhs(free_dof); 
+        
+        % display norm and iterations. 
+        disp("Iter: " + num2str(iter) + " Error: " + num2str(norm(rhs))); 
+       
 
+        if (norm(rhs) < Tol)
+            break; 
+        end
+
+        % solve for u. 
+        delta_u(free_dof) = S \ rhs;
+        dq = delta_u(1:beam.n_nodes * beam.dof_per_node); 
+        de = delta_u(beam.n_nodes * beam.dof_per_node + 1: beam.n_nodes * beam.dof_per_node + beam.n_elements * e_dim); 
+        ds = delta_u(beam.n_nodes * beam.dof_per_node + beam.n_elements * e_dim + 1 : beam.n_nodes * beam.dof_per_node + beam.n_elements * (e_dim + s_dim)); 
+        dLambda = delta_u(beam.n_nodes * beam.dof_per_node + beam.n_elements *( e_dim + s_dim) + 1 : beam.n_nodes * beam.dof_per_node + beam.n_nodes * beam.constraint_per_node + beam.n_elements * (e_dim + s_dim)); 
+
+        % update e and s. 
+        beam.update_beam_strain_stress(de, ds); 
+        % update coordinates. 
+        beam.update_beam_q(dq); 
+        % update lambdas. 
+        beam.update_beam_lambdas(dLambda);
+        
+    end
+end
 
 %% PLOT RESULTS. 
 % analytical solution - node 11. 
@@ -179,7 +233,7 @@ z_lim2 = 0.4;
 
 beam.plot_undeformed_state(x_lim1, x_lim2, y_lim1, y_lim2, z_lim1, z_lim2, scale, "");
 hold on; 
-beam.plot_deformed_beam(x_lim1, x_lim2, y_lim1, y_lim2, z_lim1, z_lim2, scale, "Deformed (\color{red}red\color{black}) & Undeformed (\color{blue}blue\color{black})");
+beam.plot_deformed_beam(x_lim1, x_lim2, y_lim1, y_lim2, z_lim1, z_lim2, scale, "Deformed (red) & Undeformed (blue)");
 
 node_indices = [11]; 
 
@@ -218,7 +272,7 @@ s4 = [];
 s5 = []; 
 s6 = []; 
 
-for i=1:n_elems
+for i=1:n_elems - 1
     i_start = (i - 1) * e_dim + 1;
     i_end = i_start - 1 + e_dim; 
     s_val = s(i_start:i_end); 
@@ -230,11 +284,11 @@ for i=1:n_elems
     s6 = [s6, s_val(6)]; 
 end
 
-x_values = 1:n_elems;
+x_values = 1:n_elems-1;
 stress_components = [s1; s2; s3; s4; s5; s6];
 for i=1:6
     figure(i+1); 
-    for j=1:n_elems
+    for j=1:n_elems - 1
         s_val = stress_components(i,j);
         x_val = x_values(j); 
         plot([x_val, x_val], [0, s_val], color="blue", LineWidth=1); 
@@ -248,10 +302,8 @@ for i=1:6
     else
         ylabel("Stress resultant component " + num2str(i) + " [N]");
     end
-    xlim([-1, n_elems + 2]);
+    xlim([-1, n_elems]);
     hold off; 
     grid on; 
 end
-
-
 

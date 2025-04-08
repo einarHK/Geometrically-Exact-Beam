@@ -91,7 +91,9 @@ for i=1:length(F1_forces)
 end
 
 % end node - free. 
-fixed_end_node = 0; 
+fixed_nodes = [1]; 
+free_dof = compute_free_dof(fixed_nodes, dof, n_constraints, n_elems + 1); 
+
 %% Run Simulation. 
 % beam coordinates. 
 X = []; 
@@ -102,12 +104,13 @@ for i=1:length(F1_forces)
     f1_z = F1_forces(i); 
     f2_z = F2_forces(i); 
     beam = all_beams(i); 
+    free_dof = compute_free_dof(fixed_nodes, dof, n_constraints, beam.n_elements + 1); 
     % external force vector. 
     for j=1:load_steps
         f_ext = zeros((beam.n_nodes) * beam.dof_per_node, 1); 
         f_ext(node_p2 * beam.dof_per_node + 3) = f2_z * (j/load_steps); % force at the middle of the beam. 
         f_ext((beam.n_elements) * beam.dof_per_node + 3) = f1_z * (j/load_steps); % force at the free end of the beam. 
-        [iter] = Newtons_method_beam(beam, n_gauss_points, C, max_iter, Tol, f_ext, 1, fixed_end_node); % iterative solver. 
+        [iter] = Newtons_method_beam(beam, n_gauss_points, C, max_iter, Tol, f_ext, 1, free_dof); % iterative solver. 
     end
     [X1, Y1, Z1] = beam.get_beam_coords(); 
     X = [X;X1]; 
@@ -123,14 +126,14 @@ for i=1:length(colors)
     y = Y(i,:); 
     z = Z(i,:); 
     color = colors(i);
-    plot(x, z, LineStyle='-', Color=color, Marker="o", MarkerFaceColor="black", LineWidth=1);
+    plot(x, z, LineStyle='-', Color=color, Marker="o", MarkerFaceColor="black", MarkerSize=4, LineWidth=1);
     hold on; 
 end
 legend(legend_names); 
 grid on; 
-xlabel("x-axis"); 
-ylabel("z-axis");
+xlabel("x-axis [m]"); 
+ylabel("z-axis [m]");
 xlim([0, 120]); 
 ylim([-80,20]);
-title("Successive configurations - Cantilever beam");
+title("Successive configurations - Cantilever beam - " + num2str(n_elems) + " beam elements");
 
