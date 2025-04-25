@@ -6,7 +6,7 @@ classdef Beam < handle
         n_elements; % number of beam elements.  
         dof_per_node; % kinematic dof per node. 
         constraint_per_node; % constraints per node. 
-        n_nodes; % total number of beam nodes.         
+        n_nodes; % total number of beam nodes. 
     end
     methods
         % constructor. 
@@ -364,6 +364,19 @@ classdef Beam < handle
             S(1:n_dof, n_dof+1:n_dof + n_constraints) = S(1:n_dof, n_dof+1:n_dof + n_constraints) + S12; 
             S(n_dof + 1:n_dof + n_constraints, 1:n_dof) = S(n_dof + 1:n_dof + n_constraints, 1:n_dof) + S21; 
         end
+
+        % The KKT matrix S_fix components. 
+        % s - interpolation value. 
+        function S_qq = compute_S_qq(obj, s)
+            
+            
+        end
+
+        function S_qs = compute_S_qs(obj, s)
+
+
+        end
+
 
         % computes the full S matrix, when considering 4 nonlinear
         % equations instead of 2. 

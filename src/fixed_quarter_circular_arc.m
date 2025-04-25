@@ -27,7 +27,7 @@ beam_fixed_dofs(1) = fixed_dof;
 beam_fixed_dofs(n_elems + 1) = fixed_dof;  
 
 % material property matrix. 
-C = eye(6); 
+C = zeros(6); 
 C(1,1) = 75; 
 C(2,2) = 75; 
 C(3,3) = 100; 
@@ -136,8 +136,6 @@ for i=1:load_steps
     % solve using Newton-Rhapson method. 
     [iter] = Newtons_method_beam(beam, n_gauss_points, C, max_iter, Tol, force, 1, free_dof); 
 end
-
-
 %% PLOT RESULTS. 
 % analytical solution - node 11. 
 x1_analytical = 0.30620366;
@@ -208,7 +206,6 @@ fprintf("Relative error - Node position: ");
 fprintf("|dx|/|x| = %f , |dy|/|y| = %f , |dz|/|z| = %f \n", dx, dy, dz); 
 
 %% PLOT - Stress component for each beam. 
-
 elements = 1:n_elems; 
 [s, e] = beam.compute_stress_strain(elements, C); 
 s1 = []; 

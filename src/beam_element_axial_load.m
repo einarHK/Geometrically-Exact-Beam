@@ -32,8 +32,8 @@ beam.s0 = zeros(6,1);
 C = eye(6); 
 
 load_steps = 10; 
-fx = 0; 
-fy = 1; 
+fx = 1; 
+fy = 0; 
 fz = 0;
 
 % dimensions for the strain and stress vectors. 
